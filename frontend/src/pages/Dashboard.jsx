@@ -13,7 +13,8 @@ export default function Dashboard() {
 
   const fetchStats = async () => {
     try {
-      const res = await api.get('/dashboard/stats');
+      const parkingName = localStorage.getItem('parking_name');
+      const res = await api.get(`/dashboard/stats?parking_name=${parkingName}`);
       setStats(res.data);
     } catch (err) {
       console.error(err);
@@ -29,8 +30,13 @@ export default function Dashboard() {
   const totalCapacity = stats.total_capacity || 120;
   const occupancyPercent = ((stats.active_sessions / totalCapacity) * 100).toFixed(1);
 
+  const parkingName = localStorage.getItem('parking_name') || 'Parking Facility';
+
   return (
     <section className="p-8 space-y-8 overflow-y-auto">
+      <div className="flex items-center justify-between mb-2">
+        <h1 className="text-2xl font-bold font-headline">{parkingName}</h1>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="md:col-span-2 bg-surface-container-lowest p-8 rounded-xl shadow-sm relative overflow-hidden group">
           <div className="relative z-10 flex flex-col h-full justify-between">

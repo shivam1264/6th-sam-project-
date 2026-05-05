@@ -37,9 +37,16 @@ parkings_collection = db["parkings"]
 
 # ── Parking Routes ──
 
+@app.route("/auth/parkings", methods=["GET"])
 @app.route("/api/parkings", methods=["GET"])
 @app.route("/parkings", methods=["GET"])
 def get_parkings():
+    # Fetch all parking lots from MongoDB
+    data = list(parkings_collection.find({}, {"_id": 1, "name": 1, "total_capacity": 1, "available_slots": 1}))
+    
+    # If it's a call from the Login screen (wants just names)
+    if request.path == "/auth/parkings":
+        return jsonify([p["name"] for p in data] if data else ["Aashima Mall Parking"]), 200
     # Fetch all parking lots from MongoDB
     data = list(parkings_collection.find({}, {"_id": 1, "name": 1, "total_capacity": 1, "available_slots": 1}))
     
@@ -88,9 +95,20 @@ def signup():
     users_collection.insert_one(user)
     return jsonify({"message": "User created successfully"}), 201
 
+@app.route("/auth/login", methods=["POST"])
 @app.route("/api/login", methods=["POST"])
 @app.route("/login", methods=["POST"])
 def login():
+    data = request.json
+    
+    # Compatibility with Hardware Key Login (Imported UI)
+    if "device_key" in data:
+        parking_name = data.get("parking_name")
+        device_key = data.get("device_key")
+        parking = parkings_collection.find_one({"name": parking_name, "deviceKey": device_key})
+        if parking:
+            return jsonify({"message": "Hardware access authorized", "parking": parking_name}), 200
+        return jsonify({"detail": "Invalid Hardware Key"}), 401
     data = request.json
     email = data.get("email")
     password = data.get("password")
@@ -184,10 +202,11 @@ def vehicle_entry():
 
     entry_time = datetime.now()
     
-    # Save entry record with parking_id
+    # Save entry record with parking_id AND name
     record = {
         "Plate_Number": plate_number,
         "Parking_Id": parking_id,
+        "Parking_Name": parking.get("name") if parking else "Aashima Mall Parking",
         "Entry_Time": entry_time,
         "Exit_Time": None,
         "Total_Time": None
@@ -308,17 +327,30 @@ def vehicle_exit():
 
 @app.route("/dashboard/stats", methods=["GET"])
 def dashboard_stats():
-    # 1. Total active sessions
-    active_sessions = parking_collection.count_documents({"Exit_Time": None})
+    parking_name = request.args.get("parking_name")
     
-    # 2. Entries/Exits today
-    from datetime import datetime, timedelta
+    # Base filter
+    filter_query = {}
+    p_capacity = TOTAL_CAPACITY
+    
+    if parking_name:
+        filter_query["Parking_Name"] = parking_name
+        # Get actual capacity from parkings collection
+        p_doc = parkings_collection.find_one({"name": parking_name})
+        if p_doc:
+            p_capacity = p_doc.get("total_capacity", TOTAL_CAPACITY)
+
+    # 1. Total active sessions for THIS parking
+    active_sessions = parking_collection.count_documents({**filter_query, "Exit_Time": None})
+    
+    # 2. Entries/Exits today for THIS parking
+    from datetime import datetime
     today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    entries_today = parking_collection.count_documents({"Entry_Time": {"$gte": today_start}})
-    exits_today = parking_collection.count_documents({"Exit_Time": {"$gte": today_start}})
+    entries_today = parking_collection.count_documents({**filter_query, "Entry_Time": {"$gte": today_start}})
+    exits_today = parking_collection.count_documents({**filter_query, "Exit_Time": {"$gte": today_start}})
     
-    # 3. Recent Logs
-    recent_logs = list(parking_collection.find().sort("Entry_Time", -1).limit(10))
+    # 3. Recent Logs for THIS parking
+    recent_logs = list(parking_collection.find(filter_query).sort("Entry_Time", -1).limit(10))
     formatted_logs = []
     for log in recent_logs:
         formatted_logs.append({
@@ -330,12 +362,40 @@ def dashboard_stats():
         })
 
     return jsonify({
-        "total_capacity": TOTAL_CAPACITY,
+        "total_capacity": p_capacity,
         "active_sessions": active_sessions,
         "entries_today": entries_today,
         "exits_today": exits_today,
-        "avg_dwell_time_mins": 45, # Mock value or calculate from data
+        "avg_dwell_time_mins": 45,
         "recent_logs": formatted_logs
+    }), 200
+
+@app.route("/occupancy/live", methods=["GET"])
+def live_occupancy():
+    parking_name = request.args.get("parking_name")
+    filter_query = {"Exit_Time": None}
+    
+    p_capacity = TOTAL_CAPACITY
+    if parking_name:
+        filter_query["Parking_Name"] = parking_name
+        p_doc = parkings_collection.find_one({"name": parking_name})
+        if p_doc:
+            p_capacity = p_doc.get("total_capacity", TOTAL_CAPACITY)
+
+    active_sessions = list(parking_collection.find(filter_query).sort("Entry_Time", -1))
+    
+    formatted_sessions = []
+    for s in active_sessions:
+        formatted_sessions.append({
+            "_id": str(s["_id"]),
+            "plate_text": s.get("Plate_Number", "Unknown"),
+            "entry_time": s.get("Entry_Time").isoformat() if s.get("Entry_Time") else None,
+            "source": "Entry Cam"
+        })
+
+    return jsonify({
+        "total_capacity": p_capacity,
+        "sessions": formatted_sessions
     }), 200
 
 @app.route("/active-vehicles", methods=["GET"])

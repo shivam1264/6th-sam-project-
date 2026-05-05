@@ -8,7 +8,8 @@ export default function LiveOccupancy() {
 
   const fetchLive = async () => {
     try {
-      const res = await api.get('/occupancy/live');
+      const parkingName = localStorage.getItem('parking_name');
+      const res = await api.get(`/occupancy/live?parking_name=${parkingName}`);
       setSessions(res.data.sessions || []);
       setTotalCapacity(res.data.total_capacity || 120);
       setLoading(false);

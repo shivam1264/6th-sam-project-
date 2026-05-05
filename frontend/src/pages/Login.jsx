@@ -30,7 +30,7 @@ export default function Login({ onLogin }) {
         parking_name: selectedParking,
         device_key: deviceKey
       });
-      onLogin(); // App.jsx will trigger state to mount the dashboard routes
+      onLogin(selectedParking); // Pass the parking name back
     } catch (err) {
       setError(err.response?.data?.detail || 'Authentication failed. Please check your Device Key.');
     } finally {

@@ -15,7 +15,10 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   if (!isAuthenticated) {
-    return <Login onLogin={() => setIsAuthenticated(true)} />;
+    return <Login onLogin={(name) => {
+      localStorage.setItem('parking_name', name);
+      setIsAuthenticated(true);
+    }} />;
   }
 
   return (
