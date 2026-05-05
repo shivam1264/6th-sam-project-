@@ -316,19 +316,22 @@ def vehicle_exit():
     payments_collection.insert_one(payment)
 
     # Increase available slot count for this specific parking
-    if p_id:
+    target_id = p_id
+    if p_id and isinstance(p_id, str) and len(p_id) == 24:
         try:
-            p_id_oid = ObjectId(p_id) if isinstance(p_id, str) and len(p_id) == 24 else p_id
-            parkings_collection.update_one({"_id": p_id_oid}, {"$inc": {"available_slots": 1}})
+            target_id = ObjectId(p_id)
         except:
-            status_collection.update_one({"_id": "status"}, {"$inc": {"available_slots": 1}})
+            pass
+
+    if target_id:
+        parkings_collection.update_one({"_id": target_id}, {"$inc": {"available_slots": 1}})
     else:
         status_collection.update_one({"_id": "status"}, {"$inc": {"available_slots": 1}})
 
     # Fetch fresh available slots for response
     available_now = 0
-    if p_id:
-        p_doc = parkings_collection.find_one({"_id": p_id_oid if 'p_id_oid' in locals() else p_id})
+    if target_id:
+        p_doc = parkings_collection.find_one({"_id": target_id})
         available_now = p_doc.get("available_slots", 0) if p_doc else 0
 
     return jsonify({
