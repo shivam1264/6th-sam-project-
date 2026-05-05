@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Parking Dashboard</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="background-overlay"></div>
+
+    <main class="dashboard-container">
+        
+        <header class="header">
+            <h1>Smart Parking System</h1>
+            <p class="subtitle">Real-time Automatic Number Plate Recognition Tracking</p>
+        </header>
+
+        <section class="status-panel">
+            <div class="status-card glass">
+                <h3>Available Slots</h3>
+                <div class="slot-counter">
+                    <span id="available-slots">--</span>
+                    <span class="total-slots">/ <span id="total-slots">100</span></span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+                <p id="status-message" class="status-message">Fetching live data...</p>
+            </div>
+        </section>
+
+        <section class="map-section glass">
+            <h2>Parking Location</h2>
+            <div id="map"></div>
+        </section>
+
+    </main>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <!-- Custom JS -->
+    <script src="script.js"></script>
+</body>
+</html>
