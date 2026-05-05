@@ -10,6 +10,9 @@ app = Flask(__name__)
 CORS(app)  # Allow frontend to access the API
 
 # MongoDB Configuration
+from dotenv import load_dotenv
+load_dotenv()
+
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
 client = MongoClient(MONGO_URI)
 db = client["smart_parking"]
