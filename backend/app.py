@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from pymongo import MongoClient
 from datetime import datetime
+from werkzeug.security import generate_password_hash, check_password_hash
+from bson import ObjectId
 import os
 
 app = Flask(__name__)
@@ -54,17 +56,61 @@ def get_parkings():
 
 # ── Profile Routes ──
 
+# ── Auth Routes ──
+
+@app.route("/api/signup", methods=["POST"])
+@app.route("/signup", methods=["POST"])
+def signup():
+    data = request.json
+    email = data.get("email")
+    password = data.get("password")
+    full_name = data.get("full_name")
+    vehicle_plate = data.get("vehicle_plate")
+    
+    if not email or not password or not vehicle_plate:
+        return jsonify({"error": "Email, password, and at least one vehicle plate are required"}), 400
+        
+    if users_collection.find_one({"email": email}):
+        return jsonify({"error": "User already exists"}), 400
+        
+    hashed_password = generate_password_hash(password)
+    user = {
+        "email": email,
+        "password": hashed_password,
+        "full_name": full_name,
+        "wallet_balance": 500.0,  # Welcome balance
+        "vehicles": [vehicle_plate.upper()]
+    }
+    users_collection.insert_one(user)
+    return jsonify({"message": "User created successfully"}), 201
+
+@app.route("/api/login", methods=["POST"])
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.json
+    email = data.get("email")
+    password = data.get("password")
+    
+    user = users_collection.find_one({"email": email})
+    if user and check_password_hash(user["password"], password):
+        # Convert ObjectId to string
+        user["_id"] = str(user["_id"])
+        del user["password"] # Security
+        return jsonify({"message": "Login successful", "user": user}), 200
+    
+    return jsonify({"error": "Invalid email or password"}), 401
+
 @app.route("/profile/<email>", methods=["GET"])
 def get_profile(email):
-    user = users_collection.find_one({"email": email}, {"_id": 0})
+    print(f"DEBUG: Profile request for email: {email}")
+    user = users_collection.find_one({"email": email})
     if not user:
-        # Return a default user if not found
-        return jsonify({
-            "full_name": "New User",
-            "email": email,
-            "wallet_balance": 0.0,
-            "vehicles": []
-        }), 200
+        print(f"DEBUG: User {email} not found in database!")
+        return jsonify({"error": "User not found", "wallet_balance": 0.0}), 404
+        
+    # Convert ObjectId
+    user["_id"] = str(user["_id"])
+    if "password" in user: del user["password"]
     return jsonify(user), 200
 
 @app.route("/profile", methods=["POST"])
@@ -77,7 +123,6 @@ def update_profile():
     update_data = {
         "full_name": data.get("full_name"),
         "phone": data.get("phone"),
-        "wallet_balance": data.get("wallet_balance", 0.0),
         "vehicles": data.get("vehicles", [])
     }
     
@@ -108,13 +153,21 @@ def vehicle_entry():
     if not plate_number:
         return jsonify({"error": "Plate number is required"}), 400
 
+    # Convert parking_id to ObjectId for DB query
+    p_oid = parking_id
+    if parking_id and len(parking_id) == 24:
+        try:
+            p_oid = ObjectId(parking_id)
+        except:
+            pass
+
     # Ensure the car isn't already parked
     existing = parking_collection.find_one({"Plate_Number": plate_number, "Exit_Time": None})
     if existing:
         return jsonify({"error": "Vehicle already parked"}), 400
 
     # Check available slots from the specific parking lot
-    parking = parkings_collection.find_one({"_id": parking_id})
+    parking = parkings_collection.find_one({"_id": p_oid})
     if not parking:
         # Fallback to status_collection if parking_id not found in parkings
         status = status_collection.find_one({"_id": "status"})
@@ -139,7 +192,7 @@ def vehicle_entry():
 
     # Decrease available slot count for this specific parking
     if parking:
-        parkings_collection.update_one({"_id": parking_id}, {"$inc": {"available_slots": -1}})
+        parkings_collection.update_one({"_id": p_oid}, {"$inc": {"available_slots": -1}})
     else:
         status_collection.update_one({"_id": "status"}, {"$inc": {"available_slots": -1}})
 
@@ -155,55 +208,56 @@ def vehicle_exit():
     if not plate_number:
         return jsonify({"error": "Plate number is required"}), 400
 
-    # Find the active parking record (optionally filter by parking_id)
+    # Find the active parking record
     query = {"Plate_Number": plate_number, "Exit_Time": None}
-    if parking_id:
-        query["Parking_Id"] = parking_id
-        
+    
+    # Pehle try karo plate number se dhoondhne ki
     record = parking_collection.find_one(query)
     
     if not record:
-        return jsonify({"error": "Vehicle not found in parking"}), 404
+        return jsonify({"error": f"Vehicle {plate_number} not found in parking"}), 404
     
-    # Use the parking_id from the record if not provided
-    p_id = parking_id or record.get("Parking_Id")
+    # Use the parking_id from the record
+    p_id = record.get("Parking_Id")
 
     exit_time = datetime.now()
     entry_time = record["Entry_Time"]
-    total_time_diff = exit_time - entry_time
-    total_time_minutes = int(total_time_diff.total_seconds() / 60)
     
-    # Calculate Fee (e.g., ₹30 per hour, minimum 1 hour)
-    hours = max(1, (total_time_minutes + 59) // 60)  # Round up to nearest hour
-    hourly_rate = 30
-    total_fee = hours * hourly_rate
+    # Calculate duration and fee
+    duration = exit_time - entry_time
+    total_time_minutes = duration.total_seconds() / 60
+    total_fee = max(30, (int(total_time_minutes) // 60 + 1) * 30) # ₹30 per hour
+    
+    print(f"DEBUG: Vehicle {plate_number} stayed for {total_time_minutes} mins. Fee: {total_fee}")
 
-    # ── FASTag Simulation Logic ──
-    # Check if a user is registered with this plate number
-    user = users_collection.find_one({"vehicles": plate_number})
-    payment_status = "Pending"
-    auto_pay_msg = ""
+    # Automated Payment (FASTag style)
+    # Use case-insensitive search for the vehicle plate
+    user = users_collection.find_one({"vehicles": {"$regex": f"^{plate_number}$", "$options": "i"}})
+    
+    payment_status = "Paid (Cash)"
+    auto_pay_msg = "Cash payment required at exit."
     
     if user:
-        wallet_balance = user.get("wallet_balance", 0.0)
+        print(f"DEBUG: User found for plate {plate_number}: {user['email']}")
+        wallet_balance = user.get("wallet_balance", 0)
         if wallet_balance >= total_fee:
-            # Auto-deduct from wallet
             new_balance = wallet_balance - total_fee
-            users_collection.update_one(
-                {"_id": user["_id"]},
-                {"$set": {"wallet_balance": new_balance}}
-            )
-            payment_status = "Paid (FASTag Auto-Debit)"
+            users_collection.update_one({"_id": user["_id"]}, {"$set": {"wallet_balance": new_balance}})
+            payment_status = "Paid (Wallet)"
             auto_pay_msg = f"FASTag detected! ₹{total_fee} deducted from wallet. New Balance: ₹{new_balance}"
+            print(f"DEBUG: Payment successful. New balance: {new_balance}")
         else:
-            auto_pay_msg = "FASTag user found but insufficient balance."
+            auto_pay_msg = "FASTag user found but insufficient balance. Please pay cash."
+            print(f"DEBUG: Insufficient balance for user {user['email']}")
+    else:
+        print(f"DEBUG: No user found for plate {plate_number}")
 
     # Update the parking record
     parking_collection.update_one(
         {"_id": record["_id"]},
         {"$set": {
             "Exit_Time": exit_time, 
-            "Total_Time": f"{total_time_minutes} mins",
+            "Total_Time": f"{int(total_time_minutes)} mins",
             "Fee": total_fee,
             "Payment_Status": payment_status
         }}
@@ -222,16 +276,30 @@ def vehicle_exit():
 
     # Increase available slot count for this specific parking
     if p_id:
-        parkings_collection.update_one({"_id": p_id}, {"$inc": {"available_slots": 1}})
+        try:
+            p_id_oid = ObjectId(p_id) if isinstance(p_id, str) and len(p_id) == 24 else p_id
+            parkings_collection.update_one({"_id": p_id_oid}, {"$inc": {"available_slots": 1}})
+        except:
+            status_collection.update_one({"_id": "status"}, {"$inc": {"available_slots": 1}})
     else:
         status_collection.update_one({"_id": "status"}, {"$inc": {"available_slots": 1}})
 
+    # Fetch fresh available slots for response
+    available_now = 0
+    if p_id:
+        p_doc = parkings_collection.find_one({"_id": p_id_oid if 'p_id_oid' in locals() else p_id})
+        available_now = p_doc.get("available_slots", 0) if p_doc else 0
+
     return jsonify({
         "message": f"Vehicle {plate_number} exited. {auto_pay_msg}",
-        "duration": f"{total_time_minutes} minutes",
-        "fee": f"₹{total_fee}",
+        "vehicle": {
+            "entryTime": entry_time.isoformat(),
+            "exitTime": exit_time.isoformat(),
+            "total_time": int(total_time_minutes)
+        },
+        "fee": total_fee,
         "payment_status": payment_status,
-        "available_slots": min(available_slots + 1, TOTAL_CAPACITY)
+        "available_slots": available_now
     }), 200
 
 @app.route("/active-vehicles", methods=["GET"])
