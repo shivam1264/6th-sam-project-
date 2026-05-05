@@ -135,6 +135,24 @@ def get_profile(email):
     if "password" in user: del user["password"]
     return jsonify(user), 200
 
+@app.route("/profile", methods=["GET"])
+def get_profile():
+    parking_name = request.args.get("parking_name")
+    if not parking_name:
+        return jsonify({"name": "Manager", "role": "Admin", "facility_name": "Smart Parking", "address": "Bhopal"}), 200
+        
+    p_doc = parkings_collection.find_one({"name": parking_name})
+    if p_doc:
+        return jsonify({
+            "name": p_doc.get("name"),
+            "role": "Facility Manager",
+            "facility_name": p_doc.get("name"),
+            "address": f"{p_doc.get('area')}, {p_doc.get('city')}",
+            "avatar_initial": p_doc.get("name")[0] if p_doc.get("name") else "P"
+        }), 200
+    
+    return jsonify({"name": parking_name, "role": "Manager", "facility_name": parking_name}), 200
+
 @app.route("/profile", methods=["POST"])
 def update_profile():
     data = request.json
@@ -329,6 +347,10 @@ def vehicle_exit():
 def dashboard_stats():
     parking_name = request.args.get("parking_name")
     
+    # Handle 'null' string from frontend
+    if parking_name == "null" or not parking_name:
+        parking_name = None
+
     # Base filter
     filter_query = {}
     p_capacity = TOTAL_CAPACITY

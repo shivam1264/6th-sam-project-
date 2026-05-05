@@ -5,10 +5,11 @@ import api from '../api';
 export default function Layout() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
-  const [appContext, setAppContext] = useState({ name: 'Alex Chen', role: 'Station Lead', facility_name: 'Central Station Parking' });
+  const [appContext, setAppContext] = useState({ name: 'Loading...', role: 'Facility Manager', facility_name: 'Smart Parking' });
 
   useEffect(() => {
-    api.get('/profile')
+    const parkingName = localStorage.getItem('parking_name');
+    api.get(`/profile?parking_name=${parkingName}`)
       .then(res => setAppContext(res.data))
       .catch(err => console.error(err));
   }, []);
@@ -104,15 +105,22 @@ export default function Layout() {
         </nav>
         <div className="px-6 pt-6 mt-auto space-y-2">
           <NavLink to="/profile" className={({ isActive }) => `flex items-center space-x-3 p-2 rounded-lg transition-colors ${isActive ? 'bg-blue-100 dark:bg-blue-900/30 ring-2 ring-blue-500' : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200'}`}>
-            <div className="w-8 h-8 rounded-full bg-slate-300 flex items-center justify-center overflow-hidden shrink-0">
-                <span className="material-symbols-outlined text-sm">local_parking</span>
+            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center overflow-hidden shrink-0 shadow-lg shadow-blue-500/20">
+                <span className="material-symbols-outlined text-white text-lg">local_parking</span>
             </div>
             <div className="overflow-hidden text-left">
-              <p className="text-xs font-bold truncate">{appContext.name}</p>
-              <p className="text-[10px] text-slate-500 truncate">{appContext.address || 'Facility Details'}</p>
+              <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">{appContext.facility_name}</p>
+              <p className="text-[10px] font-medium text-slate-500 truncate">{appContext.address || 'Loading Location...'}</p>
             </div>
           </NavLink>
-          <button onClick={() => window.location.reload()} className="w-full flex items-center space-x-3 p-2 rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+          <button 
+            onClick={() => {
+              localStorage.removeItem('isLoggedIn');
+              localStorage.removeItem('parking_name');
+              window.location.href = '/';
+            }} 
+            className="w-full flex items-center space-x-3 p-2 rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+          >
             <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0">
                 <span className="material-symbols-outlined text-sm">logout</span>
             </div>
