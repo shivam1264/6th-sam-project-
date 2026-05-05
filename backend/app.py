@@ -7,7 +7,8 @@ from bson import ObjectId
 import os
 
 app = Flask(__name__)
-CORS(app)  # Allow frontend to access the API
+# Sabhi origins allow kar rahe hain development ke liye
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # MongoDB Configuration
 from dotenv import load_dotenv
@@ -303,6 +304,38 @@ def vehicle_exit():
         "fee": total_fee,
         "payment_status": payment_status,
         "available_slots": available_now
+    }), 200
+
+@app.route("/dashboard/stats", methods=["GET"])
+def dashboard_stats():
+    # 1. Total active sessions
+    active_sessions = parking_collection.count_documents({"Exit_Time": None})
+    
+    # 2. Entries/Exits today
+    from datetime import datetime, timedelta
+    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    entries_today = parking_collection.count_documents({"Entry_Time": {"$gte": today_start}})
+    exits_today = parking_collection.count_documents({"Exit_Time": {"$gte": today_start}})
+    
+    # 3. Recent Logs
+    recent_logs = list(parking_collection.find().sort("Entry_Time", -1).limit(10))
+    formatted_logs = []
+    for log in recent_logs:
+        formatted_logs.append({
+            "_id": str(log["_id"]),
+            "plate_text": log.get("Plate_Number", "Unknown"),
+            "status": "inside" if log.get("Exit_Time") is None else "exited",
+            "entry_time": log.get("Entry_Time").isoformat() if log.get("Entry_Time") else None,
+            "exit_time": log.get("Exit_Time").isoformat() if log.get("Exit_Time") else None
+        })
+
+    return jsonify({
+        "total_capacity": TOTAL_CAPACITY,
+        "active_sessions": active_sessions,
+        "entries_today": entries_today,
+        "exits_today": exits_today,
+        "avg_dwell_time_mins": 45, # Mock value or calculate from data
+        "recent_logs": formatted_logs
     }), 200
 
 @app.route("/active-vehicles", methods=["GET"])

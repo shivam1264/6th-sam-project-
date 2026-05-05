@@ -1,6 +1,6 @@
 const Config = {
   // 💡 Local machine IP use karein taaki Mobile App backend se connect ho sake
-  BACKEND_URL: "http://10.129.141.97:5000",
+  BACKEND_URL: "https://sixth-sam-project.onrender.com",
   APP_NAME: "Smart Parking Bhopal",
 };
 
