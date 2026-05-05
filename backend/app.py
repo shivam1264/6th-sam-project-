@@ -15,25 +15,32 @@ from dotenv import load_dotenv
 load_dotenv()
 
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
-client = MongoClient(MONGO_URI)
-db = client["smart_parking"]
-parking_collection = db["parking_records"]
-status_collection = db["parking_status"]
-users_collection = db["users"]
-payments_collection = db["payments"]
+try:
+    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+    # Trigger a connection check
+    client.admin.command('ping')
+    db = client["smart_parking"]
+    parking_collection = db["parking_records"]
+    status_collection = db["parking_status"]
+    users_collection = db["users"]
+    payments_collection = db["payments"]
+    parkings_collection = db["parkings"]
 
-# Initialize available slots if not present
-TOTAL_CAPACITY = 100
-status = status_collection.find_one({"_id": "status"})
-if not status:
-    status_collection.insert_one({"_id": "status", "available_slots": TOTAL_CAPACITY})
+    # Initialize available slots if not present
+    TOTAL_CAPACITY = 100
+    status = status_collection.find_one({"_id": "status"})
+    if not status:
+        status_collection.insert_one({"_id": "status", "available_slots": TOTAL_CAPACITY})
 
-# Create Indexes for Speed
-parking_collection.create_index([("Plate_Number", 1), ("Exit_Time", 1)])
-parking_collection.create_index("Plate_Number")
-users_collection.create_index("email", unique=True)
-
-parkings_collection = db["parkings"]
+    # Create Indexes for Speed
+    parking_collection.create_index([("Plate_Number", 1), ("Exit_Time", 1)])
+    parking_collection.create_index("Plate_Number")
+    users_collection.create_index("email", unique=True)
+except Exception as e:
+    print(f"CRITICAL ERROR: Could not connect to MongoDB: {e}")
+    # Fallback for empty collections to avoid crashes later
+    parking_collection = db["parking_records"] if 'db' in locals() else None
+    parkings_collection = db["parkings"] if 'db' in locals() else None
 
 # ── Parking Routes ──
 
