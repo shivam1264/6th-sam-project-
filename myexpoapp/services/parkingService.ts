@@ -69,10 +69,11 @@ export async function fetchProfileApi(email: string): Promise<any> {
   try {
     const response = await fetch(`${Config.BACKEND_URL}/profile/${email}`);
     if (response.ok) return await response.json();
+    return { error: "User not found" };
   } catch (error) {
     console.log("Profile fetch error:", error);
+    return { error: "Backend unreachable" };
   }
-  return { full_name: "Abhishek Maury", email: email, wallet_balance: 500 };
 }
 
 export async function updateProfileApi(data: { email: string, full_name: string }): Promise<boolean> {
@@ -86,5 +87,31 @@ export async function updateProfileApi(data: { email: string, full_name: string 
   } catch (error) {
     console.log("Profile update error:", error);
     return false;
+  }
+}
+
+export async function loginApi(data: any): Promise<any> {
+  try {
+    const response = await fetch(`${Config.BACKEND_URL}/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    });
+    return await response.json();
+  } catch (error) {
+    return { error: "Connection error" };
+  }
+}
+
+export async function signupApi(data: any): Promise<any> {
+  try {
+    const response = await fetch(`${Config.BACKEND_URL}/signup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    });
+    return await response.json();
+  } catch (error) {
+    return { error: "Connection error" };
   }
 }
