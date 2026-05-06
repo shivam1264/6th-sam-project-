@@ -130,7 +130,7 @@ def login():
     return jsonify({"error": "Invalid email or password"}), 401
 
 @app.route("/profile/<email>", methods=["GET"])
-def get_profile(email):
+def get_user_profile(email):
     print(f"DEBUG: Profile request for email: {email}")
     user = users_collection.find_one({"email": email})
     if not user:
@@ -267,6 +267,17 @@ def vehicle_exit():
     
     # Use the parking_id from the record
     p_id = record.get("Parking_Id")
+    
+    # Fetch rate from the specific parking lot
+    rate_per_hour = 30 # Default
+    p_oid = p_id
+    if p_id and len(p_id) == 24:
+        try: p_oid = ObjectId(p_id)
+        except: pass
+    
+    parking_doc = parkings_collection.find_one({"_id": p_oid})
+    if parking_doc:
+        rate_per_hour = parking_doc.get("rate_per_hour", 30)
 
     exit_time = datetime.now()
     entry_time = record["Entry_Time"]
@@ -274,9 +285,10 @@ def vehicle_exit():
     # Calculate duration and fee
     duration = exit_time - entry_time
     total_time_minutes = duration.total_seconds() / 60
-    total_fee = max(30, (int(total_time_minutes) // 60 + 1) * 30) # ₹30 per hour
+    # Minimum 1 hour charge, then per hour
+    total_fee = max(rate_per_hour, (int(total_time_minutes) // 60 + 1) * rate_per_hour)
     
-    print(f"DEBUG: Vehicle {plate_number} stayed for {total_time_minutes} mins. Fee: {total_fee}")
+    print(f"DEBUG: Vehicle {plate_number} stayed for {total_time_minutes} mins at {parking_doc.get('name') if parking_doc else 'Parking'}. Rate: {rate_per_hour}/hr. Total Fee: {total_fee}")
 
     # Automated Payment (FASTag style)
     # Use case-insensitive search for the vehicle plate
@@ -292,7 +304,7 @@ def vehicle_exit():
             new_balance = wallet_balance - total_fee
             users_collection.update_one({"_id": user["_id"]}, {"$set": {"wallet_balance": new_balance}})
             payment_status = "Paid (Wallet)"
-            auto_pay_msg = f"FASTag detected! ₹{total_fee} deducted from wallet. New Balance: ₹{new_balance}"
+            auto_pay_msg = f"FASTag detected! Rs.{total_fee} deducted from wallet. New Balance: Rs.{new_balance}"
             print(f"DEBUG: Payment successful. New balance: {new_balance}")
         else:
             auto_pay_msg = "FASTag user found but insufficient balance. Please pay cash."
@@ -356,6 +368,7 @@ def vehicle_exit():
 @app.route("/dashboard/stats", methods=["GET"])
 def dashboard_stats():
     parking_name = request.args.get("parking_name")
+    print(f"DEBUG: Dashboard stats requested for: {parking_name}")
     
     # Handle 'null' string from frontend
     if parking_name == "null" or not parking_name:
